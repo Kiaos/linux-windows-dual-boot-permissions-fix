@@ -1,5 +1,7 @@
 # Permission Fixes Workspace
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 This workspace contains scripts to fix common permission issues on Linux systems, particularly for gaming and application directories.
 
 ## Scripts
@@ -39,3 +41,25 @@ The script creates a backup of current permissions before making changes. Check 
 - Bash shell
 - sudo access
 - SELinux tools (optional, for context restoration)
+
+## Credits
+
+This project was developed with assistance from:
+
+- **GitHub Copilot** - AI-powered code completion and suggestions in VS Code
+- **Grok** - Fast AI assistance for code development and problem-solving
+
+Special thanks to the open-source community and the Bazzite/Fedora communities for their contributions and support.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+The MIT License allows anyone to:
+- Use this software for any purpose
+- Modify and distribute the software
+- Fork and create derivative works
+- Use commercially
+- Private use
+
+Just keep the original copyright notice and license text in all copies.

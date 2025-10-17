@@ -78,12 +78,12 @@ sudo bash fix_home_permissions.sh
 
 #### Fix permissions for specific user
 ```bash
-sudo bash fix_home_permissions.sh kiaos
+sudo bash fix_home_permissions.sh yourusername
 ```
 
 #### Fix permissions for user with custom home path
 ```bash
-sudo bash fix_home_permissions.sh kiaos /home/kiaos
+sudo bash fix_home_permissions.sh yourusername /home/yourusername
 ```
 
 #### Combine options
@@ -308,6 +308,28 @@ If you encounter issues:
 2. Check the verification output for specific errors
 3. Review system logs for SELinux or permission issues
 4. Ensure all required tools are installed
+
+## Credits
+
+This project was developed with assistance from:
+
+- **GitHub Copilot** - AI-powered code completion and suggestions in VS Code
+- **Grok** - Fast AI assistance for code development and problem-solving
+
+Special thanks to the open-source community and the Bazzite/Fedora communities for their contributions and support.
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for full details.
+
+The MIT License is a permissive open-source license that allows:
+- ✅ **Free use** for any purpose (personal, commercial, etc.)
+- ✅ **Modification** and distribution of modified versions
+- ✅ **Forking** and creating derivative works
+- ✅ **Commercial use** without restrictions
+- ✅ **Private use** without disclosure requirements
+
+The only requirements are to include the original copyright notice and license text in all copies or substantial portions of the software.
 
 ## Changelog
 

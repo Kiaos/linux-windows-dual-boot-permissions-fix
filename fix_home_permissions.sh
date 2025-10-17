@@ -34,6 +34,7 @@ FIX_EXECUTABLES=true
 FIX_UMU=true
 SKIP_BACKUP=false
 SELINUX_ENABLE=false
+FULL_ACCESS=false
 
 # Parse command line options
 while [[ $# -gt 0 ]]; do
@@ -125,6 +126,10 @@ while [[ $# -gt 0 ]]; do
             SELINUX_ENABLE=false
             shift
             ;;
+        --full-access)
+            FULL_ACCESS=true
+            shift
+            ;;
         -h|--help)
             echo "Usage: $0 [options] [username] [home_path]"
             echo "Fix permissions for the specified user's home directory."
@@ -144,6 +149,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-backup      Skip creating permission backups"
             echo "  --enable-selinux   Enable SELinux instead of disabling"
             echo "  --disable-selinux  Disable SELinux (default SELinux behavior)"
+            echo "  --full-access      Give read/write access to others (777 for dirs, 666/777 for files)"
             echo "  -h, --help         Show this help message"
             exit 0
             ;;
@@ -247,14 +253,19 @@ if [[ "$FIX_OWNERSHIP" == true ]]; then
 fi
 
 if [[ "$FIX_PERMISSIONS" == true ]]; then
-    # Fix directory permissions (755 for directories)
-    echo -e "${BLUE}Setting directory permissions (755)...${NC}"
-    find "$TARGET_HOME" -type d -exec chmod 755 {} \;
-
-    # Fix file permissions (644 for regular files, 755 for executables)
-    echo -e "${BLUE}Setting file permissions (644 for files, 755 for executables)...${NC}"
-    find "$TARGET_HOME" -type f -exec chmod 644 {} \;
-    find "$TARGET_HOME" -type f -executable -exec chmod 755 {} \;
+    if [[ "$FULL_ACCESS" == true ]]; then
+        # Give read/write access to group and others (recursive)
+        echo -e "${BLUE}Setting full access permissions (777 for directories, 666/777 for files)...${NC}"
+        find "$TARGET_HOME" -type d -exec chmod 777 {} \;
+        find "$TARGET_HOME" -type f -exec chmod 666 {} \;
+        find "$TARGET_HOME" -type f -executable -exec chmod 777 {} \;
+    else
+        # Default: user and group read/write, others read (recursive)
+        echo -e "${BLUE}Setting default permissions (774 for directories, 664/775 for files)...${NC}"
+        find "$TARGET_HOME" -type d -exec chmod 774 {} \;
+        find "$TARGET_HOME" -type f -exec chmod 664 {} \;
+        find "$TARGET_HOME" -type f -executable -exec chmod 775 {} \;
+    fi
 fi
 
 if [[ "$FIX_SPECIAL" == true ]]; then
@@ -271,7 +282,11 @@ if [[ "$FIX_SPECIAL" == true ]]; then
     # .config and other dot directories
     for dir in .config .local .cache .mozilla .steam; do
         if [[ -d "$TARGET_HOME/$dir" ]]; then
-            chmod 755 "$TARGET_HOME/$dir"
+            if [[ "$dir" == ".config" ]]; then
+                chmod 777 "$TARGET_HOME/$dir"
+            else
+                chmod 755 "$TARGET_HOME/$dir"
+            fi
             echo -e "${GREEN}Fixed $dir permissions${NC}"
         fi
     done
@@ -367,6 +382,27 @@ if [[ "$FIX_SPECIAL" == true ]]; then
             echo -e "${GREEN}Fixed script permissions in $script_dir${NC}"
         fi
     done
+fi
+
+# Fix chrome-sandbox SUID helper in Flatpak apps (prevents Electron/Chromium setuid sandbox errors)
+if command -v flatpak >/dev/null 2>&1; then
+    echo -e "${BLUE}Checking Flatpak installations for chrome-sandbox SUID helper...${NC}"
+    FLATPAK_LOCATIONS=(/var/lib/flatpak/app "$TARGET_HOME/.local/share/flatpak/app")
+    for base in "${FLATPAK_LOCATIONS[@]}"; do
+        if [[ -d "$base" ]]; then
+            # Find chrome-sandbox files inside the installed files tree
+            find "$base" -type f -name chrome-sandbox 2>/dev/null | while IFS= read -r cs; do
+                # Only act on files that are inside the 'files' area of the Flatpak installation
+                if [[ "$cs" == *"/files/"* ]]; then
+                    echo -e "${BLUE}Configuring SUID helper: $cs${NC}"
+                    # Ensure root ownership and SUID bit so setuid sandbox works
+                    chown root:root "$cs" || echo -e "${YELLOW}Warning: chown failed on $cs${NC}"
+                    chmod 4755 "$cs" || echo -e "${YELLOW}Warning: chmod failed on $cs${NC}"
+                fi
+            done
+        fi
+    done
+    echo -e "${GREEN}Flatpak chrome-sandbox checks complete${NC}"
 fi
 
 if [[ "$FIX_NTFS" == true ]]; then
@@ -717,50 +753,6 @@ if [[ "$FIX_VERIFY" == true ]]; then
         fi
     done
 
-    # Check podman-compose configurations for SELinux compatibility
-    echo -e "${BLUE}Checking podman-compose configurations...${NC}"
-    if command -v podman-compose &> /dev/null; then
-        for compose_dir in sin1ster-website docker-game-servers; do
-            if [[ -f "$TARGET_HOME/$compose_dir/docker-compose.yml" ]]; then
-                echo -e "${BLUE}Validating $compose_dir/docker-compose.yml...${NC}"
-                if cd "$TARGET_HOME/$compose_dir" && timeout 30 podman-compose config > /dev/null 2>&1; then
-                    echo -e "${GREEN}✓ $compose_dir compose file is valid and compatible${NC}"
-                    # Check key volume directories
-                    if [[ "$compose_dir" == "sin1ster-website" ]]; then
-                        for vol in letsencrypt nginx.conf public; do
-                            if [[ -e "$TARGET_HOME/$compose_dir/$vol" ]]; then
-                                VOL_OWNER=$(stat -c "%U:%G" "$TARGET_HOME/$compose_dir/$vol")
-                                VOL_PERMS=$(stat -c "%a" "$TARGET_HOME/$compose_dir/$vol")
-                                if [[ "$VOL_OWNER" == "$TARGET_USER:$TARGET_USER" ]]; then
-                                    echo -e "${GREEN}✓ Volume $vol has correct ownership${NC}"
-                                else
-                                    echo -e "${YELLOW}⚠ Volume $vol ownership: $VOL_OWNER${NC}"
-                                fi
-                            fi
-                        done
-                    elif [[ "$compose_dir" == "docker-game-servers" ]]; then
-                        # Check some config directories
-                        for server_dir in Sin1ster-valheim-server project-zomboid-server nitrox_server; do
-                            if [[ -d "$TARGET_HOME/$compose_dir/$server_dir" ]]; then
-                                DIR_OWNER=$(stat -c "%U:%G" "$TARGET_HOME/$compose_dir/$server_dir")
-                                if [[ "$DIR_OWNER" == "$TARGET_USER:$TARGET_USER" ]]; then
-                                    echo -e "${GREEN}✓ $server_dir has correct ownership${NC}"
-                                else
-                                    echo -e "${YELLOW}⚠ $server_dir ownership: $DIR_OWNER${NC}"
-                                fi
-                            fi
-                        done
-                    fi
-                else
-                    echo -e "${RED}✗ $compose_dir compose file validation failed${NC}"
-                fi
-            fi
-        done
-    else
-        echo -e "${YELLOW}podman-compose not found, skipping validation${NC}"
-    fi
-fi
-
 echo
 echo -e "${GREEN}=== Permission Fix Complete ===${NC}"
 echo -e "${BLUE}You may need to log out and back in for all changes to take effect.${NC}"
@@ -771,8 +763,11 @@ if [[ "$FIX_OWNERSHIP" == true ]]; then
     echo "  - Fixed ownership of entire home directory"
 fi
 if [[ "$FIX_PERMISSIONS" == true ]]; then
-    echo "  - Set directory permissions to 755"
-    echo "  - Set file permissions to 644 (755 for executables)"
+    if [[ "$FULL_ACCESS" == true ]]; then
+        echo "  - Set full access permissions (777 for directories, 666/777 for files)"
+    else
+        echo "  - Set default permissions (774 for directories, 664/775 for files)"
+    fi
 fi
 if [[ "$FIX_SPECIAL" == true ]]; then
     echo "  - Fixed special directories (.ssh, .config, etc.)"
@@ -791,5 +786,5 @@ if [[ "$FIX_UMU" == true ]]; then
     echo "  - Fixed UMU compatibility for Flatpaks"
 fi
 if [[ "$FIX_VERIFY" == true ]]; then
-    echo "  - Validated podman-compose configurations"
+    echo "  - Verified ownership and permissions"
 fi

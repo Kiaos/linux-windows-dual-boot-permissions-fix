@@ -1,0 +1,15 @@
+# Ignore user-specific server directories file
+server_dirs.txt
+
+# Ignore server data and logs
+servers/data/
+servers/logs/
+servers/*.log
+
+# Ignore backups
+*.bak
+*.backup
+
+# OS files
+.DS_Store
+Thumbs.db
